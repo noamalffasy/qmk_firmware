@@ -1,9 +1,13 @@
-// Copyright 2024 yangzheng20003 (@yangzheng20003)
+// Copyright 2024 sdk66 (@sdk66)
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include QMK_KEYBOARD_H
 #include "wls/wls.h"
 #include "rgb_record/rgb_record.h"
+
+#ifdef RGBLIGHT_ENABLE
+#    include "rgb_record/rgb_rgblight.h"
+#endif
 
 #ifdef WIRELESS_ENABLE
 #    include "wireless.h"
@@ -120,6 +124,9 @@ void keyboard_post_init_kb(void) {
     gpio_set_pin_output(LED_POWER_EN_PIN);
     if (rgb_matrix_get_val() != 0) gpio_write_pin_high(LED_POWER_EN_PIN);
 
+    gpio_set_pin_output(LED_POWER_EN_2_PIN);
+    if (rgb_matrix_get_val() != 0) gpio_write_pin_high(LED_POWER_EN_2_PIN);
+
     gpio_set_pin_output(HS_LED_BOOSTING_PIN);
     gpio_write_pin_high(HS_LED_BOOSTING_PIN);
 #endif
@@ -185,6 +192,10 @@ void suspend_power_down_kb(void) {
     gpio_write_pin_low(LED_POWER_EN_PIN);
 #    endif
 
+#    ifdef LED_POWER_EN_2_PIN
+    gpio_write_pin_low(LED_POWER_EN_2_PIN);
+#    endif
+
     suspend_power_down_user();
 }
 
@@ -192,6 +203,10 @@ void suspend_wakeup_init_kb(void) {
 
 #    ifdef LED_POWER_EN_PIN
     if (rgb_matrix_get_val() != 0) gpio_write_pin_high(LED_POWER_EN_PIN);
+#    endif
+
+#    ifdef LED_POWER_EN_2_PIN
+    if (rgb_matrix_get_val() != 0) gpio_write_pin_high(LED_POWER_EN_2_PIN);
 #    endif
 
     wireless_devs_change(wireless_get_current_devs(), wireless_get_current_devs(), false);
@@ -219,9 +234,9 @@ void wireless_post_task(void) {
         wireless_devs_change(!confinfo.devs, confinfo.devs, false);
         post_init_timer = 0x00;
     }
-
+#    if defined(HS_BT_DEF_PIN) && defined(HS_2G4_DEF_PIN)
     hs_mode_scan(false, confinfo.devs, confinfo.last_btdevs);
-
+#    endif
 }
 
 uint32_t wls_process_long_press(uint32_t trigger_time, void *cb_arg) {
@@ -546,6 +561,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {
             if (record->event.pressed) {
                 rgb_matrix_enable();
                 gpio_write_pin_high(LED_POWER_EN_PIN);
+                gpio_write_pin_high(LED_POWER_EN_2_PIN);
                 if (rgb_matrix_get_val() != RGB_MATRIX_MAXIMUM_BRIGHTNESS) rgb_blink_dir();
             }
         } break;
@@ -553,6 +569,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {
             if (record->event.pressed) {
                 if (rgb_matrix_get_val() <= RGB_MATRIX_VAL_STEP) {
                     gpio_write_pin_low(LED_POWER_EN_PIN);
+                    gpio_write_pin_low(LED_POWER_EN_2_PIN);
                     for (uint8_t i = 0; i < RGB_MATRIX_LED_COUNT; i++) {
                         rgb_matrix_set_color(i, 0, 0, 0);
                     }
@@ -567,9 +584,8 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {
                 if ((index != 0xFF)) {
                     rgb_blink_dir();
                 }
-                
+                return false;
             }
-            return false;
         } break;
         case RGB_SAD: {
             if (record->event.pressed) {
@@ -578,9 +594,8 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {
                 if (index != 0xFF) {
                     rgb_blink_dir();
                 }
-               
+                return false;
             }
-            return false;
         } break;
         case TO(_BL): {
             if (record->event.pressed) {
@@ -888,6 +903,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {
 void housekeeping_task_user(void) { // loop
     uint8_t hs_now_mode;
     static uint32_t hs_current_time;
+    static bool val_value = false;
 
     charging_state = readPin(HS_BAT_CABLE_PIN);
 
@@ -910,9 +926,17 @@ void housekeeping_task_user(void) { // loop
 
     if (charging_state) {
         writePin(HS_LED_BOOSTING_PIN, 0);
+        if (!val_value) {
+            rgb_matrix_sethsv_noeeprom(start_hsv.h, start_hsv.s, 150);
+        }
+        val_value = true;
 
     } else {
         writePin(HS_LED_BOOSTING_PIN, 1);
+        if (val_value) {
+            rgb_matrix_sethsv(start_hsv.h, start_hsv.s, start_hsv.v);
+        }
+        val_value = false;
     }
 
     if (timer_elapsed32(hs_ct_time) > 3000 && hs_ct_time) {
@@ -1232,12 +1256,6 @@ bool rgb_matrix_indicators_advanced_kb(uint8_t led_min, uint8_t led_max) {
 
         return false;
     }
-#ifdef RGBLIGHT_ENABLE
-    if (rgb_matrix_indicators_advanced_user(led_min, led_max) != true) {
-
-        return false;
-    }
-#endif
 
     if (ee_clr_timer && timer_elapsed32(ee_clr_timer) > 3000) {
         hs_reset_settings();
@@ -1246,9 +1264,10 @@ bool rgb_matrix_indicators_advanced_kb(uint8_t led_min, uint8_t led_max) {
 
     if (host_keyboard_led_state().caps_lock)
         rgb_matrix_set_color(HS_RGB_INDEX_CAPS, 0x20, 0x20, 0x20);
-
+  
     if (!keymap_is_mac_system() && keymap_config.no_gui)
         rgb_matrix_set_color(HS_RGB_INDEX_WIN_LOCK, 0x20, 0x20, 0x20);
+
 
 #ifdef RGBLIGHT_ENABLE
     if (rgb_matrix_indicators_advanced_rgblight(led_min, led_max) != true) {
@@ -1316,10 +1335,15 @@ void hs_reset_settings(void) {
 void lpwr_wakeup_hook(void) {
     hs_mode_scan(false, confinfo.devs, confinfo.last_btdevs);
 
-    if (rgb_matrix_get_val() != 0)
+    if (rgb_matrix_get_val() != 0) {
         gpio_write_pin_high(LED_POWER_EN_PIN);
-    else
+        gpio_write_pin_high(LED_POWER_EN_2_PIN);
+    }     
+    else {
         gpio_write_pin_low(LED_POWER_EN_PIN);
+        gpio_write_pin_low(LED_POWER_EN_2_PIN);
+    }
+        
 
     gpio_write_pin_high(HS_LED_BOOSTING_PIN);
 }

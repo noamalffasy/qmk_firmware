@@ -219,9 +219,9 @@ void wireless_post_task(void) {
         wireless_devs_change(!confinfo.devs, confinfo.devs, false);
         post_init_timer = 0x00;
     }
-#    if defined(HS_BT_DEF_PIN) && defined(HS_2G4_DEF_PIN)
+
     hs_mode_scan(false, confinfo.devs, confinfo.last_btdevs);
-#    endif
+
 }
 
 uint32_t wls_process_long_press(uint32_t trigger_time, void *cb_arg) {
@@ -567,8 +567,9 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {
                 if ((index != 0xFF)) {
                     rgb_blink_dir();
                 }
-                return false;
+                
             }
+            return false;
         } break;
         case RGB_SAD: {
             if (record->event.pressed) {
@@ -577,8 +578,8 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {
                 if (index != 0xFF) {
                     rgb_blink_dir();
                 }
-                return false;
             }
+            return false;
         } break;
         case TO(_BL): {
             if (record->event.pressed) {
@@ -886,7 +887,6 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {
 void housekeeping_task_user(void) { // loop
     uint8_t hs_now_mode;
     static uint32_t hs_current_time;
-    static bool val_value = false;
 
     charging_state = readPin(HS_BAT_CABLE_PIN);
 
@@ -909,17 +909,9 @@ void housekeeping_task_user(void) { // loop
 
     if (charging_state) {
         writePin(HS_LED_BOOSTING_PIN, 0);
-        if (!val_value) {
-            rgb_matrix_sethsv_noeeprom(start_hsv.h, start_hsv.s, 150);
-        }
-        val_value = true;
 
     } else {
         writePin(HS_LED_BOOSTING_PIN, 1);
-        if (val_value) {
-            rgb_matrix_sethsv(start_hsv.h, start_hsv.s, start_hsv.v);
-        }
-        val_value = false;
     }
 
     if (timer_elapsed32(hs_ct_time) > 3000 && hs_ct_time) {
@@ -1061,7 +1053,7 @@ void rgb_matrix_wls_indicator(void) {
         }
 
         if (wls_rgb_indicator_times % 2) {
-            rgb_matrix_set_color(wls_rgb_indicator_index, wls_rgb_indicator_rgb.r, wls_rgb_indicator_rgb.g, wls_rgb_indicator_rgb.b);
+            rgb_matrix_set_color(wls_rgb_indicator_index, wls_rgb_indicator_rgb.g, wls_rgb_indicator_rgb.r, wls_rgb_indicator_rgb.b);
         } else {
             rgb_matrix_set_color(wls_rgb_indicator_index, 0x00, 0x00, 0x00);
         }
